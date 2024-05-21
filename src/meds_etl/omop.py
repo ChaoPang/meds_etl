@@ -104,7 +104,7 @@ def load_file(path_to_decompressed_dir: str, fname: str) -> Any:
         Opened file object
     """
     if fname.endswith(".gz"):
-        file = tempfile.NamedTemporaryFile(dir=path_to_decompressed_dir)
+        file = tempfile.NamedTemporaryFile(dir=path_to_decompressed_dir, suffix=".csv")
         subprocess.run(["gunzip", "-c", fname], stdout=file)
         return file
     else:
@@ -115,7 +115,7 @@ def load_file(path_to_decompressed_dir: str, fname: str) -> Any:
 def cast_to_datetime(table: pl.LazyFrame, column: str, move_to_end_of_day: bool = False):
     if table.schema[column] == pl.Utf8():
         if not move_to_end_of_day:
-            return (meds_etl.flat.parse_time(pl.col(column), OMOP_TIME_FORMATS),)
+            return meds_etl.flat.parse_time(pl.col(column), OMOP_TIME_FORMATS)
         else:
             # Try to cast time to a datetime but if only the date is available, then use
             # that date with a timestamp of 23:59:59
@@ -167,8 +167,8 @@ def write_event_data(
                 cast_to_datetime(batch, "birth_datetime"),
                 pl.datetime(
                     pl.col("year_of_birth"),
-                    pl.coalesce(pl.col("month_of_birth"), 1),
-                    pl.coalesce(pl.col("day_of_birth"), 1),
+                    pl.coalesce(pl.col("month_of_birth"), pl.lit(1)),
+                    pl.coalesce(pl.col("day_of_birth"), pl.lit(1)),
                     time_unit="us",
                 ),
             )
@@ -728,9 +728,9 @@ def main():
                 for table_files in split_list(parquet_table_files, args.num_shards)
             )
 
-        random.seed(RANDOM_SEED)
-        random.shuffle(all_csv_tasks)
-        random.shuffle(all_parquet_tasks)
+        rng = random.Random(RANDOM_SEED)
+        rng.shuffle(all_csv_tasks)
+        rng.shuffle(all_parquet_tasks)
 
         print("Decompressing OMOP tables, mapping to MEDS Flat format, writing to disk...")
         if args.num_proc > 1:
